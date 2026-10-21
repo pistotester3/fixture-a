@@ -1,0 +1,10 @@
+pull_request_rules:
+  - name: welcome-comment
+    conditions:
+      - base=main
+    actions:
+      comment:
+        message: hunt-probe-#{{number}}
+merge_queue:
+  max_parallel_batches: 1
+  batch_size: 1
