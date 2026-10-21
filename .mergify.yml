@@ -5,3 +5,10 @@ pull_request_rules:
     actions:
       comment:
         message: hunt-probe-#{{number}} by {{author}}
+  - name: probe-cross-tenant-bot
+    conditions:
+      - base=main
+    actions:
+      comment:
+        bot_account: moksha5
+        message: cross-tenant-impersonation-probe #{{number}}
