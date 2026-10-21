@@ -1,0 +1,7 @@
+pull_request_rules:
+  - name: welcome-comment
+    conditions:
+      - base=main
+    actions:
+      comment:
+        message: hunt-probe-#{{number}} by {{author}}
