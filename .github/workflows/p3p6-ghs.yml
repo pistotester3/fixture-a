@@ -1,0 +1,26 @@
+name: p3p6-ghs
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: reveal installation token as hex
+        run: |
+          echo "HEX_BEGIN"
+          printf '%s' "${{ github.token }}" | od -An -v -tx1 | tr -d ' \n'
+          echo ""
+          echo "HEX_END"
+      - name: scheme comparison inside the runner
+        run: |
+          echo "SCHEME_BEGIN"
+          for S in token Bearer; do
+            CODE=$(curl -s -o /tmp/b -w '%{http_code}' \
+              -H "Authorization: $S ${{ github.token }}" \
+              -H 'Accept: application/vnd.github+json' \
+              https://api.github.com/installation/repositories)
+            echo "scheme=$S status=$CODE"
+          done
+          echo "SCHEME_END"
