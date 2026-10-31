@@ -1,0 +1,45 @@
+name: d1-forkread
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  forkread:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: context
+        run: |
+          echo "EVENT=${{ github.event_name }} REF=${GITHUB_REF}"
+          echo "HEAD_REPO=${{ github.event.pull_request.head.repo.full_name }}"
+          echo "HEAD_IS_FORK=${{ github.event.pull_request.head.repo.fork }}"
+
+      - name: restore main-branch cache by exact key
+        id: ex
+        uses: actions/cache/restore@v4
+        with:
+          path: c1
+          key: d1-cache-main-m1
+      - name: exact-key outcome
+        run: |
+          echo "EXACT_HIT=${{ steps.ex.outputs.cache-hit }}"
+          cat c1/marker.txt 2>/dev/null || echo "(no c1/marker.txt)"
+
+      - name: restore by prefix
+        id: pre
+        uses: actions/cache/restore@v4
+        with:
+          path: c2
+          key: forkread-nokey-${{ github.run_id }}
+          restore-keys: |
+            d1-cache-
+            d1poison-
+      - name: prefix outcome
+        run: |
+          echo "PREFIX_HIT=${{ steps.pre.outputs.cache-hit }}"
+          echo "PREFIX_MATCHED=${{ steps.pre.outputs.cache-matched-key }}"
+          cat c2/marker.txt 2>/dev/null || echo "(no c2/marker.txt)"
