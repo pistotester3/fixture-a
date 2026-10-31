@@ -6,6 +6,10 @@ on:
         description: tag for the cache key
         required: true
         default: t1
+      rkey:
+        description: restore-key prefix
+        required: false
+        default: d1-cache-
   pull_request_target:
     types: [opened, synchronize]
 
@@ -36,7 +40,7 @@ jobs:
           path: cache-dir
           key: d1-cache-nokey-${{ github.event_name }}-${{ inputs.tag || github.run_id }}
           restore-keys: |
-            d1-cache-
+            ${{ inputs.rkey }}
 
       - name: what was restored
         run: |

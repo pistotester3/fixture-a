@@ -1,0 +1,120 @@
+name: d1-prt2
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: tag
+        required: false
+        default: t1
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  prt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: context
+        run: |
+          echo "EVENT=${{ github.event_name }}"
+          echo "REF=${GITHUB_REF}"
+          echo "REF_NAME=${GITHUB_REF_NAME}"
+          echo "BASE_REF=${{ github.base_ref }}"
+          echo "HEAD_REF=${{ github.head_ref }}"
+          echo "PR_NUMBER=${{ github.event.pull_request.number }}"
+          echo "HEAD_REPO=${{ github.event.pull_request.head.repo.full_name }}"
+          echo "HEAD_IS_FORK=${{ github.event.pull_request.head.repo.fork }}"
+          echo "GITHUB_SHA=${GITHUB_SHA}"
+
+      - name: job token scope probes
+        env:
+          JT: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          p() {
+            label="$1"; method="$2"; path="$3"; body="${4:-}"
+            if [ -n "$body" ]; then
+              code=$(curl -sS -o /tmp/p.json -w '%{http_code}' -X "$method" \
+                -H "Authorization: Bearer $JT" -H "Accept: application/vnd.github+json" -d "$body" \
+                "https://api.github.com$path")
+            else
+              code=$(curl -sS -o /tmp/p.json -w '%{http_code}' -X "$method" \
+                -H "Authorization: Bearer $JT" -H "Accept: application/vnd.github+json" \
+                "https://api.github.com$path")
+            fi
+            echo "PRT_PROBE $label -> $code :: $(head -c 220 /tmp/p.json | tr -d '\r\n')"
+          }
+          p own_repo            GET /repos/pistotester3/fixture-a
+          p installation_repos  GET '/installation/repositories?per_page=100'
+          p priv_outside        GET /repos/b74-hunt-labs/b74-priv
+          p graphql_viewer      POST /graphql '{"query":"{viewer{login}}"}'
+          if [ -n "${PR}" ]; then
+            p write_comment_inside POST "/repos/pistotester3/fixture-a/issues/${PR}/comments" \
+              '{"body":"d1 prt2 job-token write test"}'
+          fi
+
+      - name: secret visibility
+        env:
+          D1: ${{ secrets.D1_SECRET }}
+        run: |
+          echo "SECRET_LEN=${#D1}"
+          echo "SECRET_PRESENT=$([ -n "$D1" ] && echo yes || echo no)"
+
+      - name: cache restore in PR context (default-branch scope?)
+        id: pre
+        uses: actions/cache/restore@v4
+        with:
+          path: cache-dir
+          key: d1prt2-unique-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            d1prt2-
+
+      - name: cache restore outcome
+        run: |
+          echo "PRE_HIT=${{ steps.pre.outputs.cache-hit }}"
+          echo "PRE_MATCHED=${{ steps.pre.outputs.cache-matched-key }}"
+          echo "--- content ---"
+          cat cache-dir/marker.txt 2>/dev/null || echo "(no marker.txt restored)"
+
+      - name: seed cache dir always
+        run: |
+          mkdir -p cache-dir
+          echo "written_in=${GITHUB_EVENT_NAME} ref=${GITHUB_REF_NAME} run=${GITHUB_RUN_ID}" > cache-dir/marker.txt
+          cat cache-dir/marker.txt
+
+      - name: save cache from PR context
+        uses: actions/cache/save@v4
+        with:
+          path: cache-dir
+          key: d1prt2-pr-${{ github.run_id }}
+
+      - name: checkout fork head with explicit opt-in
+        if: ${{ github.event_name == 'pull_request_target' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          allow-unsafe-pr-checkout: true
+      - name: fork code executed in trusted context
+        if: ${{ github.event_name == 'pull_request_target' }}
+        run: |
+          echo "CHECKED_OUT_SHA=$(git rev-parse HEAD)"
+          ls -la
+          cat FORK_MARKER.txt 2>/dev/null || echo "(no FORK_MARKER.txt)"
+          if [ -f ./fork-probe.sh ]; then sh ./fork-probe.sh; else echo "(no fork-probe.sh)"; fi
+      - name: token write after fork checkout
+        if: ${{ github.event_name == 'pull_request_target' }}
+        env:
+          JT: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          code=$(curl -sS -o /tmp/pp.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $JT" -H "Accept: application/vnd.github+json" \
+            -d '{"body":"d1 prt2 write after fork-code execution"}' \
+            "https://api.github.com/repos/pistotester3/fixture-a/issues/${PR}/comments" || echo 000)
+          echo "PRT_AFTER_FORK_WRITE=$code"
